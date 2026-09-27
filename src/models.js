@@ -839,18 +839,24 @@ function charIndex(ch) {
 // ---------------------------------------------------------------------------------------------
 // createKartModel
 // ---------------------------------------------------------------------------------------------
-export function createKartModel(character) {
+export function createKartModel(character, customOptions = null) {
   const ch = normChar(character);
   const tpl = kartTemplate(ch);
   const st = tpl.st;
 
+  const cust = customOptions || character.customization || null;
+  let basePaintColor = (cust?.paint?.color != null ? cust.paint.color : (character.customColor ?? ch.color));
+  let baseAccentColor = (cust?.paint?.accent != null ? cust.paint.accent : (character.customAccent ?? ch.accent));
+  let baseRimColor = (cust?.wheel?.rim != null ? cust.wheel.rim : ch.accent);
+  let baseSpokeColor = (cust?.wheel?.spoke != null ? cust.wheel.spoke : ch.color);
+
   // per-kart materials (so star mode emissive does not leak to other karts)
   const paint = new THREE.MeshPhysicalMaterial({
-    color: ch.color, roughness: 0.32, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.06,
+    color: basePaintColor, roughness: 0.32, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.06,
     envMap: envMap(), envMapIntensity: 0.55, emissive: 0x000000, side: THREE.DoubleSide,
   });
   const accent = new THREE.MeshPhysicalMaterial({
-    color: ch.accent, roughness: 0.35, metalness: 0.1, clearcoat: 0.8, clearcoatRoughness: 0.1,
+    color: baseAccentColor, roughness: 0.35, metalness: 0.1, clearcoat: 0.8, clearcoatRoughness: 0.1,
     envMap: envMap(), envMapIntensity: 0.55, emissive: 0x000000,
   });
   const slots = { paint, accent };
@@ -934,7 +940,7 @@ export function createKartModel(character) {
     if (x < 0) flip.rotation.y = PI; // outer face toward -X on the right side
     const spin = new THREE.Group();
     pivot.add(flip); flip.add(spin);
-    spin.add(instantiate(wheelTemplate(R, W, ch.accent, ch.color), slots));
+    spin.add(instantiate(wheelTemplate(R, W, baseRimColor, baseSpokeColor), slots));
     visual.add(pivot);
     wheels.push({ pivot, spin, R, front, dirSign: x < 0 ? -1 : 1, baseY: R });
     const a = new THREE.Object3D();
@@ -1090,7 +1096,7 @@ export function createKartModel(character) {
         S.starOn = true;
       } else if (S.starOn) {
         paint.emissive.setHex(0); accent.emissive.setHex(0);
-        paint.color.setHex(ch.color); accent.color.setHex(ch.accent);
+        paint.color.setHex(basePaintColor); accent.color.setHex(baseAccentColor);
         paint.emissiveIntensity = 1; accent.emissiveIntensity = 1;
         S.starOn = false;
       }
@@ -1114,7 +1120,29 @@ export function createKartModel(character) {
   // decals are thin; no need to cast
   hoodDecal.castShadow = false; nameDecal.castShadow = false;
 
-  return { root, anchors, animate, setShrunk, dispose, character: ch, parts: { body, driver, head, wheels: wheels.map((w) => w.pivot) } };
+  function applyCustomization(custom = {}) {
+    if (custom.paint?.color != null) basePaintColor = custom.paint.color;
+    else if (custom.color != null) basePaintColor = custom.color;
+    else basePaintColor = ch.color;
+
+    if (custom.paint?.accent != null) baseAccentColor = custom.paint.accent;
+    else if (custom.accent != null) baseAccentColor = custom.accent;
+    else baseAccentColor = ch.accent;
+
+    paint.color.setHex(basePaintColor);
+    accent.color.setHex(baseAccentColor);
+
+    const rimC = custom.wheel?.rim != null ? custom.wheel.rim : ch.accent;
+    const spokeC = custom.wheel?.spoke != null ? custom.wheel.spoke : ch.color;
+    baseRimColor = rimC;
+    baseSpokeColor = spokeC;
+    for (const w of wheels) {
+      while (w.spin.children.length > 0) w.spin.remove(w.spin.children[0]);
+      w.spin.add(instantiate(wheelTemplate(w.R, w.front ? K.frontW : K.rearW, rimC, spokeC), slots));
+    }
+  }
+
+  return { root, anchors, animate, setShrunk, dispose, applyCustomization, character: ch, parts: { body, driver, head, wheels: wheels.map((w) => w.pivot) } };
 }
 
 const _geos = new Map();

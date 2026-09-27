@@ -593,6 +593,152 @@ export class HUD {
     setTimeout(() => { if (this._resKey) window.addEventListener('keydown', this._resKey); }, 400);
   }
 
+  showGrandPrixResults(standings, { round, totalRounds, isLastRound, trophy, nextTrackName, onNextRound, onMenu } = {}) {
+    const R = this.resultsEl;
+    const rows = standings.map((r, i) => {
+      const img = this.portrait(r.character);
+      const col = r.character ? hex(r.character.color) : '#888';
+      const pc = PLACE_COLORS[r.rank - 1] || '#fff';
+      return `<div class="res-row${r.isPlayer ? ' me' : ''}" style="--d:${0.15 + i * 0.05}s">
+        <div class="res-place" style="color:${pc}">${r.rank}<small>${ordinal(r.rank)}</small></div>
+        <div class="res-portrait" style="--kc:${col}">${img ? `<img src="${img}" alt="">` : `<span>${(r.name || '?')[0]}</span>`}</div>
+        <div class="res-name">${r.name}${r.isPlayer ? ' <em>YOU</em>' : ''}</div>
+        <div class="res-best" style="color:var(--gold);font-weight:900;">+${r.lastPoints} PTS</div>
+        <div class="res-time" style="font-size:22px;color:#fff;">${r.totalPoints} PTS</div>
+      </div>`;
+    }).join('');
+
+    const playerEntry = standings.find((r) => r.isPlayer);
+    const pRank = playerEntry ? playerEntry.rank : 8;
+
+    let title = `ROUND ${round}/${totalRounds} COMPLETE`;
+    let sub = `CUP STANDINGS · AFTER ROUND ${round}`;
+    let trophyHtml = '';
+
+    if (isLastRound) {
+      if (pRank === 1) {
+        title = '🏆 GOLD CUP CHAMPION! 🏆';
+        trophyHtml = '<div class="gp-trophy-banner gold">🏆 1ST PLACE · GOLD TROPHY AWARDED!</div>';
+      } else if (pRank === 2) {
+        title = '🥈 SILVER CUP PODIUM! 🥈';
+        trophyHtml = '<div class="gp-trophy-banner silver">🥈 2ND PLACE · SILVER TROPHY AWARDED!</div>';
+      } else if (pRank === 3) {
+        title = '🥉 BRONZE CUP PODIUM! 🥉';
+        trophyHtml = '<div class="gp-trophy-banner bronze">🥉 3RD PLACE · BRONZE TROPHY AWARDED!</div>';
+      } else {
+        title = 'GRAND PRIX FINISHED';
+        trophyHtml = `<div class="gp-trophy-banner none">FINISHED ${pRank}${ordinal(pRank)} OVERALL</div>`;
+      }
+      sub = 'FINAL CHAMPIONSHIP STANDINGS';
+    }
+
+    const btnHtml = isLastRound
+      ? `<button class="btn primary" data-act="menu">MAIN MENU</button>`
+      : `<button class="btn primary" data-act="next">NEXT RACE: ${nextTrackName ? nextTrackName.toUpperCase() : 'NEXT TRACK'} ➔</button>
+         <button class="btn" data-act="menu">QUIT CUP</button>`;
+
+    R.innerHTML = `
+      <div class="res-panel gp-panel">
+        <div class="res-title">${title}</div>
+        <div class="res-sub">${sub}</div>
+        ${trophyHtml}
+        <div class="res-table">${rows}</div>
+        <div class="res-buttons">${btnHtml}</div>
+      </div>`;
+
+    R.classList.remove('hidden');
+    requestAnimationFrame(() => R.classList.add('show'));
+
+    const btns = [...R.querySelectorAll('.btn')];
+    let sel = 0;
+    const focus = () => btns.forEach((b, i) => b.classList.toggle('focus', i === sel));
+    focus();
+
+    const act = (a) => {
+      this.hideResults();
+      bus.emit('ui:confirm');
+      if (a === 'next') onNextRound && onNextRound();
+      else onMenu && onMenu();
+    };
+
+    btns.forEach((b, i) => {
+      b.addEventListener('click', () => act(b.dataset.act));
+      b.addEventListener('mouseenter', () => { if (sel !== i) { sel = i; focus(); bus.emit('ui:move'); } });
+    });
+
+    this._resKey = (e) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD'].includes(e.code)) {
+        sel = (sel + 1) % btns.length; focus(); bus.emit('ui:move'); e.preventDefault();
+      } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && !e.repeat) {
+        e.preventDefault(); act(btns[sel].dataset.act);
+      }
+    };
+    setTimeout(() => { if (this._resKey) window.addEventListener('keydown', this._resKey); }, 400);
+  }
+
+  showTimeTrialResults(player, { pb, isNewRecord, onRestart, onMenu } = {}) {
+    const R = this.resultsEl;
+    const bestLap = player.lapTimes?.length ? Math.min(...player.lapTimes) : player.finishTime;
+    const totalTime = player.finishTime || 0;
+    const lapsHtml = (player.lapTimes || []).map((t, i) => `
+      <div class="res-row ${t === bestLap ? 'me' : ''}">
+        <div class="res-place">L${i + 1}</div>
+        <div class="res-name">LAP ${i + 1} ${t === bestLap ? '⭐ BEST' : ''}</div>
+        <div class="res-time">${formatTime(t)}</div>
+      </div>
+    `).join('');
+
+    const title = isNewRecord ? '⭐ NEW RECORD! ⭐' : 'TIME TRIAL COMPLETE';
+    const sub = isNewRecord ? `NEW PERSONAL BEST: ${formatTime(bestLap)}` : (pb ? `PB: ${formatTime(pb)}` : '');
+
+    R.innerHTML = `
+      <div class="res-panel">
+        <div class="res-title">${title}</div>
+        <div class="res-sub">${sub}</div>
+        <div class="res-table">
+          <div class="res-row me">
+            <div class="res-place">🏁</div>
+            <div class="res-name">TOTAL TIME</div>
+            <div class="res-time">${formatTime(totalTime)}</div>
+          </div>
+          ${lapsHtml}
+        </div>
+        <div class="res-buttons">
+          <button class="btn primary" data-act="restart">TRY AGAIN</button>
+          <button class="btn" data-act="menu">MAIN MENU</button>
+        </div>
+      </div>`;
+
+    R.classList.remove('hidden');
+    requestAnimationFrame(() => R.classList.add('show'));
+
+    const btns = [...R.querySelectorAll('.btn')];
+    let sel = 0;
+    const focus = () => btns.forEach((b, i) => b.classList.toggle('focus', i === sel));
+    focus();
+
+    const act = (a) => {
+      this.hideResults();
+      bus.emit('ui:confirm');
+      if (a === 'restart') onRestart && onRestart();
+      else onMenu && onMenu();
+    };
+
+    btns.forEach((b, i) => {
+      b.addEventListener('click', () => act(b.dataset.act));
+      b.addEventListener('mouseenter', () => { if (sel !== i) { sel = i; focus(); bus.emit('ui:move'); } });
+    });
+
+    this._resKey = (e) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD'].includes(e.code)) {
+        sel = (sel + 1) % btns.length; focus(); bus.emit('ui:move'); e.preventDefault();
+      } else if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && !e.repeat) {
+        e.preventDefault(); act(btns[sel].dataset.act);
+      }
+    };
+    setTimeout(() => { if (this._resKey) window.addEventListener('keydown', this._resKey); }, 400);
+  }
+
   hideResults() {
     if (this._resKey) { window.removeEventListener('keydown', this._resKey); this._resKey = null; }
     this.resultsEl.classList.remove('show');

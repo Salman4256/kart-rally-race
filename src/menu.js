@@ -1,11 +1,19 @@
-// Title screen, character select (with difficulty / laps options + controls help), pause menu, gamepad navigation.
+// Title screen, character select (with mode / difficulty / laps / track / paint / wheels options + controls help), pause menu, gamepad navigation.
 import { bus } from './events.js';
 import { CHARACTERS, GAME_TITLE } from './config.js';
+import { getTrackList } from './tracks.js';
+import { PAINT_OPTIONS, WHEEL_OPTIONS, loadCustomization, saveCustomization, getCustomizationValues } from './customization.js';
 
 const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
+const MODES = [
+  { id: 'race', label: 'SINGLE RACE' },
+  { id: 'grandprix', label: '🏆 GRAND PRIX' },
+  { id: 'timetrial', label: '⏱ TIME TRIAL' },
+];
 const DIFFS = ['easy', 'normal', 'hard'];
 const DIFF_LABEL = { easy: '50cc · EASY', normal: '100cc · NORMAL', hard: '150cc · HARD' };
 const LAPS = [1, 3, 5];
+const TRACK_LIST = getTrackList();
 const STAT_KEYS = [['speed', 'SPEED', 'SPD'], ['accel', 'ACCEL', 'ACC'], ['handling', 'HANDLING', 'HDL'], ['weight', 'WEIGHT', 'WGT']];
 
 function el(tag, cls, parent, html) {
@@ -30,23 +38,34 @@ const CONTROLS_HTML = `
 export class Menu {
   constructor(uiRoot, handlers = {}) {
     this.uiRoot = uiRoot;
-    this.h = handlers; // { onStart({characterIndex, difficulty, laps}), onResume, onRestart, onQuit }
+    this.h = handlers; // { onStart({mode, characterIndex, difficulty, laps, trackId, customization}), onResume, onRestart, onQuit }
     this.screen = null; // 'title' | 'select' | 'pause' | null
     this.portraitFn = null;
+    this.modeIndex = 0;
     this.charIndex = 0;
     this.diffIndex = 1;
     this.lapsIndex = 1;
+    this.trackIndex = 0;
+    this.paintIndex = 0;
+    this.wheelIndex = 0;
     this.zone = 'grid';
     this.optIndex = 0;
     this.pauseIndex = 0;
     this._pad = { prev: {}, repeatT: 0, dir: null };
     this.gameState = 'title';
+
     try {
       const s = JSON.parse(localStorage.getItem('tkr-settings') || '{}');
+      if (s.modeIndex >= 0 && s.modeIndex < MODES.length) this.modeIndex = s.modeIndex;
       if (s.charIndex >= 0 && s.charIndex < CHARACTERS.length) this.charIndex = s.charIndex;
       if (s.diffIndex >= 0 && s.diffIndex < DIFFS.length) this.diffIndex = s.diffIndex;
       if (s.lapsIndex >= 0 && s.lapsIndex < LAPS.length) this.lapsIndex = s.lapsIndex;
+      if (s.trackIndex >= 0 && s.trackIndex < TRACK_LIST.length) this.trackIndex = s.trackIndex;
     } catch (e) { /* storage unavailable */ }
+
+    const cust = loadCustomization();
+    this.paintIndex = cust.paintIndex || 0;
+    this.wheelIndex = cust.wheelIndex || 0;
 
     this._buildTitle();
     this._buildSelect();
@@ -66,6 +85,7 @@ export class Menu {
     });
     this._refreshPreview();
   }
+
   portrait(ch) {
     if (!ch || !this.portraitFn) return '';
     this._portraits = this._portraits || new Map();
@@ -90,7 +110,7 @@ export class Menu {
       </div>
       <div class="press-start">PRESS ENTER / CLICK TO START</div>
       <div class="title-foot">
-        <span>© Turbo Kart Rally · original procedural game</span>
+        <span>© Turbo Kart Rally · Grand Prix & Time Trial Edition</span>
         <span class="kc">M</span> mute
       </div>`;
     t.addEventListener('click', () => { if (this.screen === 'title') this._toSelect(); });
@@ -99,7 +119,7 @@ export class Menu {
   _buildSelect() {
     const s = this.selectEl = el('div', 'screen select-screen', this.uiRoot);
     s.innerHTML = `
-      <div class="sel-header"><div class="sel-title">CHOOSE YOUR RACER</div><div class="sel-back">ESC · BACK</div></div>
+      <div class="sel-header"><div class="sel-title">CHOOSE YOUR RACER & KART</div><div class="sel-back">ESC · BACK</div></div>
       <div class="sel-body">
         <div class="sel-grid"></div>
         <div class="sel-side">
@@ -112,13 +132,18 @@ export class Menu {
             </div>
           </div>
           <div class="opts">
-            <div class="opt" data-i="0"><span class="opt-lbl">CLASS</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
-            <div class="opt" data-i="1"><span class="opt-lbl">LAPS</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
-            <button class="btn primary race-btn" data-i="2">RACE!</button>
+            <div class="opt" data-i="0"><span class="opt-lbl">MODE</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <div class="opt" data-i="1"><span class="opt-lbl">CLASS</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <div class="opt" data-i="2"><span class="opt-lbl">LAPS</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <div class="opt" data-i="3"><span class="opt-lbl">TRACK</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <div class="opt" data-i="4"><span class="opt-lbl">PAINT</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <div class="opt" data-i="5"><span class="opt-lbl">WHEELS</span><span class="opt-arrow l">◀</span><span class="opt-val"></span><span class="opt-arrow r">▶</span></div>
+            <button class="btn primary race-btn" data-i="6">RACE!</button>
           </div>
         </div>
       </div>
       <div class="controls-help">${CONTROLS_HTML}</div>`;
+
     const grid = s.querySelector('.sel-grid');
     this.cards = CHARACTERS.map((ch, i) => {
       const card = el('div', 'card', grid);
@@ -133,6 +158,7 @@ export class Menu {
       card.addEventListener('dblclick', () => { if (this.screen === 'select') this._start(); });
       return { card, img: card.querySelector('img'), initial: card.querySelector('.initial') };
     });
+
     this.pv = {
       img: s.querySelector('.pv-portrait img'),
       initial: s.querySelector('.pv-initial'),
@@ -142,10 +168,11 @@ export class Menu {
       kartLbl: s.querySelector('.pv-kart-lbl'),
       stats: s.querySelector('.pv-stats'),
     };
+
     this.optEls = [...s.querySelectorAll('.opts [data-i]')];
     this.optEls.forEach((o, i) => {
       o.addEventListener('mouseenter', () => { if (this.screen === 'select') { this.zone = 'opts'; this.optIndex = i; this._refreshFocus(); } });
-      if (i < 2) {
+      if (i < 6) {
         o.querySelector('.l').addEventListener('click', (e) => { e.stopPropagation(); this.zone = 'opts'; this.optIndex = i; this._changeOpt(-1); });
         o.querySelector('.r').addEventListener('click', (e) => { e.stopPropagation(); this.zone = 'opts'; this.optIndex = i; this._changeOpt(1); });
         o.querySelector('.opt-val').addEventListener('click', () => { this.zone = 'opts'; this.optIndex = i; this._changeOpt(1); });
@@ -153,6 +180,7 @@ export class Menu {
         o.addEventListener('click', () => this._start());
       }
     });
+
     s.querySelector('.sel-back').addEventListener('click', () => this._toTitle());
     this._refreshPreview();
     this._refreshOpts();
@@ -197,8 +225,22 @@ export class Menu {
     this._showOnly(this.loadingEl);
   }
   hideAll() { this.screen = null; this._showOnly(null); }
+
   get settings() {
-    return { characterIndex: this.charIndex, difficulty: DIFFS[this.diffIndex], laps: LAPS[this.lapsIndex] };
+    const isGP = this.modeIndex === 1;
+    return {
+      mode: MODES[this.modeIndex].id,
+      characterIndex: this.charIndex,
+      difficulty: DIFFS[this.diffIndex],
+      laps: isGP ? 3 : LAPS[this.lapsIndex],
+      trackId: TRACK_LIST[this.trackIndex].id,
+      customization: {
+        paintIndex: this.paintIndex,
+        wheelIndex: this.wheelIndex,
+        paint: PAINT_OPTIONS[this.paintIndex],
+        wheel: WHEEL_OPTIONS[this.wheelIndex],
+      },
+    };
   }
 
   _toSelect() { bus.emit('ui:confirm'); this.showSelect(); this.h.onScreen && this.h.onScreen('select'); }
@@ -211,51 +253,120 @@ export class Menu {
     this.cards.forEach((c, j) => c.card.classList.toggle('selected', j === i));
     this._refreshPreview();
     this._refreshFocus();
+    this._emitCustomization();
   }
+
   _confirmChar() {
     bus.emit('ui:confirm');
-    this.zone = 'opts'; this.optIndex = 2;
+    this.zone = 'opts'; this.optIndex = 6;
     const c = this.cards[this.charIndex].card;
     c.classList.remove('picked'); void c.offsetWidth; c.classList.add('picked');
     this._refreshFocus();
   }
+
   _refreshPreview() {
     if (!this.pv) return;
     const ch = CHARACTERS[this.charIndex];
     const url = this.portrait(ch);
     if (url) { this.pv.img.src = url; this.pv.img.style.display = ''; this.pv.initial.style.display = 'none'; }
     else { this.pv.img.style.display = 'none'; this.pv.initial.style.display = ''; this.pv.initial.textContent = ch.name[0]; }
-    this.pv.portrait.style.setProperty('--kc', hex(ch.color));
+
+    const paint = PAINT_OPTIONS[this.paintIndex];
+    const pCol = paint.color != null ? hex(paint.color) : hex(ch.color);
+    const aCol = paint.accent != null ? hex(paint.accent) : hex(ch.accent);
+
+    this.pv.portrait.style.setProperty('--kc', pCol);
     this.pv.name.textContent = ch.name.toUpperCase();
-    this.pv.swatch.style.background = `linear-gradient(135deg, ${hex(ch.color)} 60%, ${hex(ch.accent)} 60%)`;
-    this.pv.kartLbl.textContent = `${ch.hat.toUpperCase()} · KART`;
+    this.pv.swatch.style.background = `linear-gradient(135deg, ${pCol} 60%, ${aCol} 60%)`;
+    this.pv.kartLbl.textContent = `${WHEEL_OPTIONS[this.wheelIndex].name}`;
     this.pv.stats.innerHTML = STAT_KEYS.map(([k, l]) => `<div class="st big"><span>${l}</span>${statBar(ch.stats[k])}</div>`).join('');
     this.pv.portrait.classList.remove('pop'); void this.pv.portrait.offsetWidth; this.pv.portrait.classList.add('pop');
   }
+
   _refreshOpts() {
     if (!this.optEls) return;
-    this.optEls[0].querySelector('.opt-val').textContent = DIFF_LABEL[DIFFS[this.diffIndex]];
-    this.optEls[1].querySelector('.opt-val').textContent = `${LAPS[this.lapsIndex]} LAP${LAPS[this.lapsIndex] > 1 ? 'S' : ''}`;
+    const isGP = this.modeIndex === 1;
+    const isTT = this.modeIndex === 2;
+
+    this.optEls[0].querySelector('.opt-val').textContent = MODES[this.modeIndex].label;
+    this.optEls[1].querySelector('.opt-val').textContent = DIFF_LABEL[DIFFS[this.diffIndex]];
+    this.optEls[2].querySelector('.opt-val').textContent = isGP ? '3 LAPS · CUP' : isTT ? '3 LAPS · TRIAL' : `${LAPS[this.lapsIndex]} LAPS`;
+    this.optEls[3].querySelector('.opt-val').textContent = isGP ? '🍄 MUSHROOM CUP (3)' : TRACK_LIST[this.trackIndex].name.toUpperCase();
+    this.optEls[4].querySelector('.opt-val').textContent = PAINT_OPTIONS[this.paintIndex].name;
+    this.optEls[5].querySelector('.opt-val').textContent = WHEEL_OPTIONS[this.wheelIndex].name;
+
+    const btn = this.optEls[6];
+    btn.textContent = isGP ? 'START CUP!' : isTT ? 'START TRIAL!' : 'RACE!';
   }
+
   _refreshFocus() {
     this.cards.forEach((c, j) => c.card.classList.toggle('focus', this.zone === 'grid' && j === this.charIndex));
     this.optEls.forEach((o, j) => o.classList.toggle('focus', this.zone === 'opts' && j === this.optIndex));
   }
+
   _changeOpt(d) {
-    if (this.optIndex === 0) this.diffIndex = (this.diffIndex + d + DIFFS.length) % DIFFS.length;
-    else if (this.optIndex === 1) this.lapsIndex = (this.lapsIndex + d + LAPS.length) % LAPS.length;
-    else return;
+    if (this.optIndex === 0) {
+      this.modeIndex = (this.modeIndex + d + MODES.length) % MODES.length;
+    } else if (this.optIndex === 1) {
+      this.diffIndex = (this.diffIndex + d + DIFFS.length) % DIFFS.length;
+    } else if (this.optIndex === 2) {
+      if (this.modeIndex === 0) {
+        this.lapsIndex = (this.lapsIndex + d + LAPS.length) % LAPS.length;
+      }
+    } else if (this.optIndex === 3) {
+      if (this.modeIndex !== 1) {
+        this.trackIndex = (this.trackIndex + d + TRACK_LIST.length) % TRACK_LIST.length;
+      }
+    } else if (this.optIndex === 4) {
+      this.paintIndex = (this.paintIndex + d + PAINT_OPTIONS.length) % PAINT_OPTIONS.length;
+      this._saveAndEmitCustom();
+    } else if (this.optIndex === 5) {
+      this.wheelIndex = (this.wheelIndex + d + WHEEL_OPTIONS.length) % WHEEL_OPTIONS.length;
+      this._saveAndEmitCustom();
+    } else return;
+
     bus.emit('ui:move');
-    this._refreshOpts(); this._refreshFocus();
+    this._refreshOpts();
+    this._refreshPreview();
+    this._refreshFocus();
     const v = this.optEls[this.optIndex].querySelector('.opt-val');
-    v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump');
+    if (v) {
+      v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump');
+    }
   }
+
+  _saveAndEmitCustom() {
+    saveCustomization({
+      paintIndex: this.paintIndex,
+      wheelIndex: this.wheelIndex,
+      decalIndex: 0,
+    });
+    this._emitCustomization();
+  }
+
+  _emitCustomization() {
+    bus.emit('menu:customize', {
+      paint: PAINT_OPTIONS[this.paintIndex],
+      wheel: WHEEL_OPTIONS[this.wheelIndex],
+      charIndex: this.charIndex,
+    });
+  }
+
   _start() {
     if (this.screen !== 'select') return;
-    try { localStorage.setItem('tkr-settings', JSON.stringify({ charIndex: this.charIndex, diffIndex: this.diffIndex, lapsIndex: this.lapsIndex })); } catch (e) { /* ignore */ }
+    try {
+      localStorage.setItem('tkr-settings', JSON.stringify({
+        modeIndex: this.modeIndex,
+        charIndex: this.charIndex,
+        diffIndex: this.diffIndex,
+        lapsIndex: this.lapsIndex,
+        trackIndex: this.trackIndex,
+      }));
+    } catch (e) { /* ignore */ }
     bus.emit('ui:confirm');
     this.h.onStart && this.h.onStart(this.settings);
   }
+
   _gridCols() {
     try {
       const g = this.selectEl.querySelector('.sel-grid');
@@ -263,7 +374,9 @@ export class Menu {
       return n >= 1 && n <= 8 ? n : 2;
     } catch (e) { return 2; }
   }
+
   _refreshPause() { this.pauseBtns.forEach((b, i) => b.classList.toggle('focus', i === this.pauseIndex)); }
+
   _pauseAct(a) {
     if (this.screen !== 'pause') return;
     bus.emit('ui:confirm');
@@ -302,11 +415,18 @@ export class Menu {
         if (up) {
           if (this.optIndex === 0) { this.zone = 'grid'; } else this.optIndex--;
           bus.emit('ui:move'); this._refreshFocus();
-        } else if (down) { this.optIndex = Math.min(2, this.optIndex + 1); bus.emit('ui:move'); this._refreshFocus(); }
-        else if (left) {
-          if (this.optIndex === 2) { this.zone = 'grid'; bus.emit('ui:move'); this._refreshFocus(); } else this._changeOpt(-1);
-        } else if (right) { if (this.optIndex < 2) this._changeOpt(1); }
-        else if (isEnter && !e.repeat) { if (this.optIndex === 2) this._start(); else this._changeOpt(1); }
+        } else if (down) {
+          this.optIndex = Math.min(6, this.optIndex + 1);
+          bus.emit('ui:move'); this._refreshFocus();
+        } else if (left) {
+          if (this.optIndex === 6) { this.zone = 'grid'; bus.emit('ui:move'); this._refreshFocus(); }
+          else this._changeOpt(-1);
+        } else if (right) {
+          if (this.optIndex < 6) this._changeOpt(1);
+        } else if (isEnter && !e.repeat) {
+          if (this.optIndex === 6) this._start();
+          else this._changeOpt(1);
+        }
       }
       return;
     }

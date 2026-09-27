@@ -6,10 +6,15 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { bus } from './events.js';
 import { CHARACTERS, RACE, PHYSICS } from './config.js';
-import { RaceManager } from './race.js';
+import { getTrackConfig } from './tracks.js';
+import { RaceManager, formatTime } from './race.js';
 import { HUD } from './hud.js';
 import { Menu } from './menu.js';
 import { AudioEngine } from './audio.js';
+import { GrandPrixManager } from './grandprix.js';
+import { GhostSystem } from './ghost.js';
+import { TouchControls } from './touch.js';
+import { loadCustomization, getCustomizationValues } from './customization.js';
 
 // ---------------------------------------------------------------------------------------------
 // Error isolation: one failing subsystem must never freeze the loop. Log once per error type.
@@ -91,9 +96,9 @@ function fallbackKartModel(character) {
   }
   return { root, anchors, animate() {}, setShrunk(s) { root.scale.setScalar(s); }, dispose() { body.geometry.dispose(); mat.dispose(); } };
 }
-function makeKartModel(character) {
+function makeKartModel(character, customOptions = null) {
   if (mods.models && mods.models.createKartModel) {
-    try { return mods.models.createKartModel(character); } catch (e) { report('models.createKartModel', e); }
+    try { return mods.models.createKartModel(character, customOptions); } catch (e) { report('models.createKartModel', e); }
   }
   return fallbackKartModel(character);
 }
@@ -139,6 +144,9 @@ const menu = new Menu(uiRoot, {
   onQuit: () => goToTitle(),
   onScreen: (s) => { setState(s === 'select' ? 'select' : 'title'); },
 });
+const grandPrix = new GrandPrixManager();
+let ghostSystem = null;
+let touchControls = null;
 let input = null;
 
 // ---------------------------------------------------------------------------------------------
@@ -147,7 +155,7 @@ let input = null;
 let state = 'boot';
 let prevState = null;
 let world = null;
-let lastSettings = { characterIndex: 0, difficulty: 'normal', laps: RACE.laps };
+let lastSettings = { mode: 'race', characterIndex: 0, difficulty: 'normal', laps: RACE.laps, trackId: 'palm_cove' };
 let introTimer = 0;
 let resultsShown = false;
 let time = 0;
@@ -168,50 +176,77 @@ const RACE_STATES = new Set(['intro', 'countdown', 'racing', 'finished']);
 // ---------------------------------------------------------------------------------------------
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-function buildWorld({ mode, characterIndex = 0, difficulty = 'normal', laps = RACE.laps }) {
+function buildWorld({ mode = 'race', characterIndex = 0, difficulty = 'normal', laps = RACE.laps, trackId = 'palm_cove', customization = null }) {
   if (!mods.track || !mods.track.createTrack) throw new Error('track.js unavailable');
   if (!mods.kart || !mods.kart.Kart) throw new Error('kart.js unavailable');
   const w = { mode, difficulty, laps, karts: [], ais: [], playerAI: null, player: null, scene: new THREE.Scene() };
-  w.track = mods.track.createTrack(w.scene, renderer);
+  const trackConfig = getTrackConfig(trackId);
+  w.track = mods.track.createTrack(w.scene, renderer, trackConfig);
 
-  // roster: attract mode = every character in order (kart index == character index)
+  const isTimeTrial = mode === 'timetrial';
+  const isGrandPrix = mode === 'grandprix';
+
+  const userCustom = customization || loadCustomization();
+  const customValues = getCustomizationValues(userCustom);
+
   let chars;
-  if (mode === 'race') {
+  let racerCount = RACE.racers;
+  if (isTimeTrial) {
+    chars = [CHARACTERS[characterIndex] || CHARACTERS[0]];
+    racerCount = 1;
+  } else if (isGrandPrix && grandPrix.active) {
+    chars = grandPrix.roster.map((r) => r.character);
+    racerCount = chars.length;
+  } else if (mode === 'race') {
     const others = shuffle(CHARACTERS.filter((_, i) => i !== characterIndex));
     chars = [CHARACTERS[characterIndex], ...others];
   } else chars = CHARACTERS.slice();
 
   const { Kart } = mods.kart;
-  for (let i = 0; i < RACE.racers; i++) {
+  for (let i = 0; i < racerCount; i++) {
     const character = chars[i % chars.length];
-    const isPlayer = mode === 'race' && i === 0;
-    const model = makeKartModel(character);
+    const isPlayer = mode !== 'attract' && i === 0;
+    const model = makeKartModel(character, isPlayer ? customValues : null);
     const kart = new Kart({ scene: w.scene, track: w.track, character, isPlayer, index: i, model });
     w.karts.push(kart);
     if (isPlayer) w.player = kart;
   }
 
-  // grid order: player mid-pack (slot 4 or 5), others shuffled
-  const gridOrder = new Array(RACE.racers);
-  const rest = shuffle(w.karts.filter((k) => k !== w.player));
-  if (w.player) {
-    const slot = 4 + ((Math.random() * 2) | 0);
-    gridOrder[slot] = w.player;
+  // If time trial, give player triple mushrooms and initialize ghost system
+  if (isTimeTrial && w.player) {
+    w.player.item = 'triple_mushroom';
+    w.player.itemCount = 3;
+    ghostSystem = new GhostSystem({ scene: w.scene, trackId });
+    ghostSystem.startLap();
   }
-  for (let i = 0; i < gridOrder.length; i++) if (!gridOrder[i]) gridOrder[i] = rest.shift();
 
-  w.race = new RaceManager({ track: w.track, karts: w.karts, player: w.player, laps, silent: mode !== 'race' });
+  // grid order
+  const gridOrder = new Array(racerCount);
+  if (isTimeTrial) {
+    gridOrder[0] = w.player;
+  } else {
+    const rest = shuffle(w.karts.filter((k) => k !== w.player));
+    if (w.player) {
+      const slot = isGrandPrix ? Math.min(racerCount - 1, 3 + ((Math.random() * 2) | 0)) : (4 + ((Math.random() * 2) | 0));
+      gridOrder[slot] = w.player;
+    }
+    for (let i = 0; i < gridOrder.length; i++) if (!gridOrder[i]) gridOrder[i] = rest.shift();
+  }
+
+  w.race = new RaceManager({ track: w.track, karts: w.karts, player: w.player, laps, silent: mode === 'attract' });
   w.race.placeOnGrid(gridOrder);
 
-  const AIClass = (mods.ai && mods.ai.AIDriver) || null;
-  for (const k of w.karts) {
-    if (k === w.player) continue;
-    let ai = null;
-    if (AIClass) ai = safe('ai.ctor', () => new AIClass(k, w.track, { difficulty: mode === 'race' ? difficulty : 'hard' }));
-    w.ais.push(ai || new FallbackAI(k, w.track));
+  if (!isTimeTrial) {
+    const AIClass = (mods.ai && mods.ai.AIDriver) || null;
+    for (const k of w.karts) {
+      if (k === w.player) continue;
+      let ai = null;
+      if (AIClass) ai = safe('ai.ctor', () => new AIClass(k, w.track, { difficulty: mode !== 'attract' ? difficulty : 'hard' }));
+      w.ais.push(ai || new FallbackAI(k, w.track));
+    }
+    if (mods.items && mods.items.ItemSystem) w.items = safe('items.ctor', () => new mods.items.ItemSystem({ scene: w.scene, track: w.track, karts: w.karts }));
   }
 
-  if (mods.items && mods.items.ItemSystem) w.items = safe('items.ctor', () => new mods.items.ItemSystem({ scene: w.scene, track: w.track, karts: w.karts }));
   if (mods.effects && mods.effects.Effects) w.effects = safe('effects.ctor', () => new mods.effects.Effects(w.scene, camera));
   w.chase = (mods.camera && mods.camera.ChaseCamera && safe('camera.ctor', () => new mods.camera.ChaseCamera(camera))) || new FallbackCamera(camera);
   w.ctx = { karts: w.karts, player: w.player || w.karts[0], itemSystem: w.items || null, time: 0 };
@@ -225,6 +260,7 @@ function disposeWorld() {
   const w = world;
   world = null;
   renderPass.scene = fallbackScene;
+  if (ghostSystem) { safe('dispose.ghost', () => ghostSystem.dispose()); ghostSystem = null; }
   if (!w) return;
   safe('dispose.items', () => w.items && w.items.dispose && w.items.dispose());
   safe('dispose.effects', () => w.effects && w.effects.dispose && w.effects.dispose());
@@ -274,6 +310,7 @@ function buildAttract() {
 }
 
 function goToTitle() {
+  if (grandPrix) grandPrix.active = false;
   hud.hide(); hud.hideResults();
   audio.setPaused(false);
   audio.setGameplayActive(false);
@@ -288,7 +325,7 @@ function goToTitle() {
 }
 
 function startRace(settings) {
-  lastSettings = { ...lastSettings, ...settings };
+  if (settings) lastSettings = { ...lastSettings, ...settings };
   hud.hide(); hud.hideResults();
   menu.showLoading('GET READY!');
   audio.setPaused(false);
@@ -297,7 +334,17 @@ function startRace(settings) {
   setTimeout(() => {
     disposeWorld();
     try {
-      world = buildWorld({ mode: 'race', ...lastSettings });
+      const mode = lastSettings.mode || 'race';
+      if (mode === 'grandprix' && !grandPrix.active) {
+        grandPrix.start({
+          cupId: 'mushroom_cup',
+          difficulty: lastSettings.difficulty,
+          characterIndex: lastSettings.characterIndex,
+          laps: lastSettings.laps || 3,
+        });
+        lastSettings.trackId = grandPrix.currentTrackId;
+      }
+      world = buildWorld({ mode, ...lastSettings });
     } catch (e) {
       report('buildWorld', e);
       menu.showLoading('RACE FAILED TO LOAD — SEE CONSOLE');
@@ -322,8 +369,18 @@ function showIntroCard() {
   if (!introCard) introCard = Object.assign(document.createElement('div'), { className: 'intro-card' });
   uiRoot.appendChild(introCard);
   const name = (world && world.track && world.track.name) || 'Grand Circuit';
-  const d = { easy: '50cc', normal: '100cc', hard: '150cc' }[lastSettings.difficulty] || '';
-  introCard.innerHTML = `<div class="ic-sub">${d} · ${lastSettings.laps} LAP${lastSettings.laps > 1 ? 'S' : ''}</div><div class="ic-name">${name}</div><div class="ic-skip">ENTER · SKIP</div>`;
+  const mode = (world && world.mode) || 'race';
+  let sub = '';
+  if (mode === 'grandprix') {
+    sub = `🏆 MUSHROOM CUP · ROUND ${grandPrix.currentRound + 1}/3`;
+  } else if (mode === 'timetrial') {
+    const pb = ghostSystem ? ghostSystem.getPB(lastSettings.trackId) : null;
+    sub = pb ? `⏱ TIME TRIAL · PB: ${formatTime(pb)}` : `⏱ TIME TRIAL · HOT LAP`;
+  } else {
+    const d = { easy: '50cc', normal: '100cc', hard: '150cc' }[lastSettings.difficulty] || '';
+    sub = `${d} · ${lastSettings.laps} LAP${lastSettings.laps > 1 ? 'S' : ''}`;
+  }
+  introCard.innerHTML = `<div class="ic-sub">${sub}</div><div class="ic-name">${name}</div><div class="ic-skip">ENTER / TAP · SKIP</div>`;
   introCard.classList.remove('show'); void introCard.offsetWidth; introCard.classList.add('show');
 }
 function hideIntroCard() { if (introCard) introCard.classList.remove('show'); }
@@ -357,6 +414,13 @@ bus.on('race:go', () => {
     audio.playMusic('race');
   }
 });
+bus.on('race:lap', (d) => {
+  if (world && world.mode === 'timetrial' && ghostSystem && d.kart === world.player) {
+    const res = ghostSystem.finishLap(d.lapTime);
+    if (res.isNewRecord) hud.toast('⭐ NEW RECORD! ⭐ ' + (d.lapTime ? formatTime(d.lapTime) : ''));
+    ghostSystem.startLap();
+  }
+});
 bus.on('race:finish', (d) => {
   if (!world || !d || !d.kart || !d.kart.isPlayer) return;
   setState('finished');
@@ -365,18 +429,47 @@ bus.on('race:finish', (d) => {
   world.playerAI = (AIClass && safe('ai.player', () => new AIClass(world.player, world.track, { difficulty: 'easy' }))) || new FallbackAI(world.player, world.track);
 });
 bus.on('race:end', (d) => {
-  if (!world || world.mode !== 'race') return;
+  if (!world || world.mode === 'attract') return;
   resultsShown = true;
   const results = (d && d.results) || world.race.computeResults();
   if (state === 'paused') resume();
   setTimeout(() => {
     if (!world || !resultsShown) return;
     audio.playMusic('menu');
-    hud.showResults(results, {
-      laps: world.race.laps,
-      onRestart: () => startRace(lastSettings),
-      onMenu: () => goToTitle(),
-    });
+    if (world.mode === 'grandprix') {
+      const standings = grandPrix.recordRaceResults(results);
+      if (grandPrix.isLastRound) {
+        const summary = grandPrix.finishCup();
+        hud.showGrandPrixResults(standings, {
+          round: 3, totalRounds: 3, isLastRound: true, trophy: summary.trophy,
+          onMenu: () => { grandPrix.active = false; goToTitle(); },
+        });
+      } else {
+        const nextTrackId = grandPrix.advanceRound();
+        const nextCfg = getTrackConfig(nextTrackId);
+        hud.showGrandPrixResults(standings, {
+          round: grandPrix.currentRound, totalRounds: 3, isLastRound: false,
+          nextTrackName: nextCfg.name,
+          onNextRound: () => startRace({ ...lastSettings, trackId: nextTrackId }),
+          onMenu: () => { grandPrix.active = false; goToTitle(); },
+        });
+      }
+    } else if (world.mode === 'timetrial') {
+      const pb = ghostSystem ? ghostSystem.getPB(lastSettings.trackId) : null;
+      const best = world.player.lapTimes?.length ? Math.min(...world.player.lapTimes) : world.player.finishTime;
+      const isNew = pb && best <= pb;
+      hud.showTimeTrialResults(world.player, {
+        pb, isNewRecord: isNew,
+        onRestart: () => startRace(lastSettings),
+        onMenu: () => goToTitle(),
+      });
+    } else {
+      hud.showResults(results, {
+        laps: world.race.laps,
+        onRestart: () => startRace(lastSettings),
+        onMenu: () => goToTitle(),
+      });
+    }
   }, 200);
 });
 
@@ -396,6 +489,10 @@ window.addEventListener('keydown', (e) => {
   }
   if (state === 'intro' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') && !e.repeat) {
     beginCountdown();
+  }
+  if (e.code === 'KeyR' && !e.repeat && world && world.mode === 'timetrial' && RACE_STATES.has(state)) {
+    startRace(lastSettings);
+    return;
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && state !== 'boot') e.preventDefault();
 });
@@ -461,8 +558,12 @@ const debug = { autopilot: false };
 function simulate(w, dt) {
   time += dt;
   w.ctx.time = time;
-  const racing = w.mode === 'race';
+  const racing = w.mode !== 'attract';
   const player = w.player;
+
+  if (w.mode === 'timetrial' && ghostSystem && player && w.race.phase === 'racing') {
+    ghostSystem.recordFrame(player, dt);
+  }
 
   // player input (always drain the controller so edge-triggered presses don't queue up)
   if (racing && player) {
@@ -544,6 +645,15 @@ async function boot() {
   requestAnimationFrame(frame);
   await loadModules();
   if (mods.input && mods.input.InputController) input = safe('input.ctor', () => new mods.input.InputController());
+  touchControls = new TouchControls(uiRoot, input);
+  bus.on('menu:customize', ({ paint, wheel, charIndex }) => {
+    if (world && world.karts) {
+      const k = world.karts[charIndex];
+      if (k && k.model && k.model.applyCustomization) {
+        k.model.applyCustomization({ paint, wheel });
+      }
+    }
+  });
   if (mods.models && mods.models.createCharacterPortrait) {
     const fn = (c) => mods.models.createCharacterPortrait(c);
     safe('portraits', () => menu.setPortraitProvider(fn));

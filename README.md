@@ -1,8 +1,8 @@
 # Turbo Kart Rally
 
-**An arcade kart racer in the spirit of Mario Kart, built entirely with Three.js. Every mesh, texture, sound effect and music track is generated in code at load time. There are no asset files and no build step.**
+**An arcade kart racer in the spirit of Mario Kart, built entirely with Three.js. Every 3D mesh, procedural track, texture, sound effect, and music track is generated in code at runtime. There are no asset files and no build step.**
 
-The whole game was produced by five Claude Opus 5.5 sub-agents working in parallel from a single prompt, without a single follow-up question. The prompt is reproduced below.
+Featuring multiple game modes (Single Race, Grand Prix, Time Trial with Ghost Replay), 3 distinct procedural circuits, real-time kart customization, full mobile touch controls, and Progressive Web App (PWA) support.
 
 <p align="center">
   <a href="https://bridge-mind.github.io/turbo-kart-rally/"><img src="docs/screenshots/title.jpg" alt="Turbo Kart Rally title screen" width="800"></a>
@@ -12,61 +12,89 @@ The whole game was produced by five Claude Opus 5.5 sub-agents working in parall
   <a href="https://bridge-mind.github.io/turbo-kart-rally/"><strong>▶ Play it in your browser</strong></a>
 </p>
 
-## Play
+---
 
-Open **https://bridge-mind.github.io/turbo-kart-rally/** in a desktop browser with WebGL2 (Chrome, Edge, Firefox or Safari). Click or press Enter on the title screen, choose one of eight racers, pick a class (50cc, 100cc or 150cc) and a lap count, then hit RACE!. A keyboard or a gamepad works.
+## 🎮 Play
 
-Race seven AI drivers around Palm Cove Circuit. Drift through corners and release for a mini-turbo. Grab item boxes and fire shells, drop bananas, pop mushrooms, or call down lightning on the field.
+Open **https://bridge-mind.github.io/turbo-kart-rally/** in any modern browser with WebGL2 (desktop, tablet, or mobile). Click or tap on the title screen, choose your racer and kart custom styling, choose your class (50cc, 100cc, or 150cc) and game mode, and hit **RACE!**.
 
-## The prompt that built this
+Supports **Keyboard**, **Gamepad**, and **Mobile Touch Controls**.
 
-This is the complete, verbatim prompt given to Claude Code. Nothing else was specified.
+---
 
-> I need you to launch five opus 5.5 sub-agents and help me build a triple A quality game that is a clone of Mario Kart. What I want you to do is I want you to launch these sub-agents, build the game without asking me any questions at all, and use 3JS to build the game. And once you're done, report back to me.
+## 🏆 Game Modes
 
-## How it was built
+### 1. 🏎️ Single Race
+Classic quick race against 7 AI drivers on any track of your choice with configurable laps (1, 3, or 5).
 
-The orchestrating agent wrote an architecture contract first ([ARCHITECTURE.md](ARCHITECTURE.md)), plus the shared config and event bus, then launched five sub-agents that each owned one slice of the codebase. No sub-agent edited another's files. Each one tested its slice in a real browser against stubs, and the game and UI agent then integrated and play-tested the whole thing.
+### 2. 🏆 Grand Prix / Cup Mode
+A complete 3-track championship across all circuits:
+- **Round 1**: Palm Cove Circuit
+- **Round 2**: Ember Canyon
+- **Round 3**: Frosted Peaks
+- **Point Scoring**: Standard championship points `(1st: 10, 2nd: 8, 3rd: 6, 4th: 4, 5th: 3, 6th: 2, 7th: 1, 8th: 0 pts)` maintained across all 8 racers.
+- **Standings & Trophy Celebration**: Points scoreboard between rounds, culminating in a Championship Podium ceremony awarding **Gold**, **Silver**, or **Bronze** trophies saved to `localStorage`.
 
-| Agent | Owns | Delivers |
-| --- | --- | --- |
-| 1 · World | `track.js`, `environment.js`, `track-textures.js` | Procedural circuit, barriers, boost pads, jump ramps, water, sky, scenery, grandstands, lighting |
-| 2 · Driving | `kart.js`, `ai.js`, `input.js` | Arcade kart physics, drift and mini-turbo, AI drivers, keyboard and gamepad input |
-| 3 · Items and FX | `items.js`, `effects.js` | Item boxes, roulette and eight items, pooled particle effects |
-| 4 · Art and camera | `models.js`, `camera.js` | Karts, drivers, item models, portraits, chase camera |
-| 5 · Game and UI | `main.js`, `race.js`, `hud.js`, `menu.js`, `audio.js`, `styles.css` | Game loop, race manager, HUD, menus, results, procedural audio and music |
+### 3. ⏱️ Time Trial + Ghost Replay
+Pure hot-lap time trials with zero AI or offensive hazards:
+- **3 Tactical Mushrooms**: Practice cutting corners and perfecting racing lines.
+- **Holographic Ghost Car**: Telemetry is recorded at 20 Hz. When you set a personal best, a translucent cyan 3D ghost kart plays back your exact line on subsequent laps!
+- **Lap Delta**: Real-time sector and lap delta indicators.
+- **Quick Restart**: Instant lap restart with <kbd>R</kbd>.
 
-`src/config.js` (roster, physics tuning, items, difficulty, key bindings) and `src/events.js` (the event bus) were written before the sub-agents started.
+---
 
-## Features
+## 🏁 Tracks
 
-- **Eight racers**, each with their own hat, look and stats for speed, acceleration, handling and weight: Blaze, Zippy, Bella, Toadly, Rex, Grumbo, Koopz and Dotty.
-- **Palm Cove Circuit**, about 2.1 km, with a long start straight, sweepers, an S-bend, a bridge over a lagoon, a hairpin, 8 boost pads, 2 jump ramps and 30 item boxes.
-- **Arcade handling** with hop, drift, three-stage mini-turbo, a rocket start, trick boosts off ramps, off-road slowdown, wall bumps and kart-to-kart collisions resolved by weight.
-- **Eight items**: mushroom, triple mushroom, banana, green shell, homing red shell, star, lightning and blue shell. Item odds are weighted by race position.
-- **AI drivers** that follow a racing line, drift on corners, dodge hazards, use items tactically and rubber-band toward the player.
-- **Fully synthesised audio**: engine, drift and item sounds, and a sequenced chiptune soundtrack with separate menu and race music that speeds up on the final lap.
-- **Effects**: pooled drift sparks, boost flames, dust, star sparkles, explosions, confetti and speed lines, with bloom.
-- **Presentation**: live demo race behind the title screen, intro flyover, 3-2-1-GO with start lights, position and lap HUD, item roulette, minimap, speedometer, final-lap and wrong-way banners, results screen.
+The game features 3 complete, handcrafted procedural circuits with unique themes, elevations, and obstacles:
 
-## Controls
+| Track | Theme | Characteristics |
+| :--- | :--- | :--- |
+| 🌴 **Palm Cove Circuit** | Tropical coastal | Lagoon bridge, seaside sweepers, technical hairpin, 8 boost pads, 2 jump ramps |
+| 🌋 **Ember Canyon** | Volcanic / desert | Red rock canyon, mesa switchbacks, lava lake crossing, long straights, tight chicane |
+| ❄️ **Frosted Peaks** | Alpine mountain | Snow-covered summit, frozen lake crossing, ski jump ramp, pine forest high-speed sweepers |
 
-| Action | Keyboard | Gamepad |
-| --- | --- | --- |
-| Accelerate | W or Up | A or right trigger |
-| Brake / reverse | S or Down | B or left trigger |
-| Steer | A and D, or Left and Right | Left stick |
-| Hop / drift | Space | RB or X |
-| Use item | E, X or Left Shift | LB or Y |
-| Look back | C | Click either stick |
-| Pause | Esc or P | Start |
-| Mute | M | |
+---
 
-Hold drift through a corner. Sparks turn blue, then orange, then purple. Release for a bigger boost the longer you held it. Hold accelerate as the countdown reaches GO for a rocket start.
+## 🎨 Kart Customization
 
-## Run it locally
+Customize your kart in the select menu with real-time 3D preview:
+- **Primary Paint Finishes**: *Character Default, Crimson Fury, Cyber Cyan, Solar Yellow, Emerald Green, Sunset Orange, Royal Violet, Obsidian Black, Pearl White*.
+- **Custom Wheel Rims**: *Stock Wheels, Gold Pro Spoke, Chrome Star, Cyber Neon, Shadow Carbon, Hyper Magenta*.
+- All customizations persist in `localStorage` and apply across Single Race, Grand Prix, and Time Trial modes.
 
-There is no build step. Serve the folder with any static server:
+---
+
+## 📱 Mobile Touch Controls & PWA
+
+- **Neo-Arcade Touch Controls**: On-screen multi-touch buttons for steering (◀ / ▶), gas, brake/reverse, hop/drift, and item use.
+- **PWA Installation**: Install directly to iOS or Android home screen with `manifest.json`, high-resolution vector icons, and landscape lock.
+- **Offline Play**: Powered by a Service Worker (`sw.js`) that pre-caches all code, assets, audio, and shaders.
+
+---
+
+## 🕹️ Controls
+
+| Action | Keyboard | Gamepad | Mobile Touch |
+| :--- | :--- | :--- | :--- |
+| **Accelerate** | <kbd>W</kbd> / <kbd>↑</kbd> | <kbd>A</kbd> / RT | Green **GAS** button |
+| **Brake / Reverse** | <kbd>S</kbd> / <kbd>↓</kbd> | <kbd>B</kbd> / LT | Red **BRAKE** button |
+| **Steer** | <kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> | Left Stick / D-Pad | **◀** and **▶** buttons |
+| **Hop / Drift** | <kbd>Space</kbd> | <kbd>RB</kbd> / <kbd>X</kbd> | Yellow **DRIFT** button |
+| **Use Item** | <kbd>E</kbd> / <kbd>X</kbd> / <kbd>Shift</kbd> | <kbd>LB</kbd> / <kbd>Y</kbd> | Purple **ITEM** button |
+| **Look Back** | <kbd>C</kbd> | Stick Click | — |
+| **Quick Restart** *(Time Trial)* | <kbd>R</kbd> | — | Menu Restart |
+| **Pause** | <kbd>Esc</kbd> / <kbd>P</kbd> | Start | Top **⏸** button |
+| **Mute Audio** | <kbd>M</kbd> | — | — |
+| **Toggle Fullscreen** | — | — | Top **⛶** button |
+
+> **Pro Tip**: Hold drift through turns until sparks transition from blue to orange to purple, then release for a powerful Mini-Turbo boost. Hold accelerate right as the countdown reaches **GO** for a rocket start!
+
+---
+
+## 🚀 Run It Locally
+
+There is no build step or bundler needed. Serve the directory with any local static server:
 
 ```bash
 git clone https://github.com/bridge-mind/turbo-kart-rally.git
@@ -74,49 +102,58 @@ cd turbo-kart-rally
 python3 -m http.server 8080
 ```
 
-Then open http://localhost:8080. Three.js r170 is loaded from jsDelivr through an import map, so an internet connection is needed.
+Then visit **http://localhost:8080** in your browser. Three.js r170 is loaded from jsDelivr via an import map.
 
-## Project layout
+---
+
+## 📁 Project Layout
 
 ```
 turbo-kart-rally/
-├── index.html            entry page and import map
-├── ARCHITECTURE.md       contract the five sub-agents built against
+├── index.html            Entry HTML, viewport meta, and import map
+├── manifest.json         PWA web app manifest (standalone, landscape)
+├── sw.js                 Service Worker for offline caching & instant launch
+├── icon.svg              High-resolution vector PWA app icon
+├── ARCHITECTURE.md       System specifications & module contracts
 ├── src/
-│   ├── main.js           renderer, post-processing, state machine, game loop
-│   ├── config.js         roster, physics tuning, items, difficulty, key bindings
-│   ├── events.js         shared event bus
-│   ├── track.js          circuit, surfaces, walls, racing line
-│   ├── environment.js    sky, lights, water, terrain, scenery
-│   ├── kart.js           kart physics
-│   ├── ai.js             AI drivers
-│   ├── input.js          keyboard and gamepad
-│   ├── items.js          item boxes, roulette, items
-│   ├── effects.js        particles and bursts
-│   ├── models.js         karts, drivers, item models, portraits
-│   ├── camera.js         chase camera
-│   ├── race.js           laps, positions, countdown, finish
-│   ├── hud.js            in-race HUD and results
-│   ├── menu.js           title, character select, pause
-│   ├── audio.js          Web Audio sound and music
-│   └── styles.css        UI styling
-├── dev/                  per-module test harnesses the sub-agents used
-└── docs/screenshots/     images used in this README
+│   ├── main.js           Renderer, post-processing, game state machine, loop
+│   ├── config.js         Racers, physics constants, items, key bindings
+│   ├── events.js         Shared lightweight event bus
+│   ├── tracks.js         Track registry (Palm Cove, Ember Canyon, Frosted Peaks)
+│   ├── track.js          Track spline, procedural road geometry, collision
+│   ├── track-textures.js Procedural asphalt, curb, and terrain canvas textures
+│   ├── environment.js    Sky, lighting, water, terrain, vegetation, scenery
+│   ├── grandprix.js      Grand Prix cup manager, points tally, and trophies
+│   ├── ghost.js          Time Trial telemetry recorder & holographic ghost car
+│   ├── customization.js  Kart paint palettes, wheel rim styles, persistence
+│   ├── touch.js          Responsive mobile virtual touch controls overlay
+│   ├── kart.js           Arcade kart physics, drift stages, boost, collisions
+│   ├── ai.js             AI driver pathing, drifting, obstacle avoidance
+│   ├── input.js          Keyboard, gamepad, and virtual touch input layer
+│   ├── items.js          Item boxes, roulette, and 8 projectile/buff behaviors
+│   ├── effects.js        Particle systems: drift sparks, boosts, smoke, stars
+│   ├── models.js         3D procedural karts, character hats, driver meshes
+│   ├── camera.js         Dynamic chase camera with lead and shake
+│   ├── race.js           Laps, standings, checkpoints, wrong-way detection
+│   ├── hud.js            In-game HUD, minimap, speedometer, and results screens
+│   ├── menu.js           Title, character select, customizer, pause menu
+│   ├── audio.js          Synthesized Web Audio sound effects & sequenced chiptune
+│   └── styles.css        Glassmorphic arcade UI styling & responsive layout
+└── dev/                  Per-module test harnesses
 ```
 
-Open `window.__game` in the browser console for debug hooks such as `startRace()`, `toFinalLap()`, `finishPlayer()` and `debug.autopilot = true`.
+Open `window.__game` in your browser console for debugging hooks:
+- `__game.startRace({ mode: 'grandprix' })`
+- `__game.toFinalLap()`
+- `__game.finishPlayer()`
+- `__game.debug.autopilot = true`
 
-## Screenshots
+---
 
-| | |
-| --- | --- |
-| ![Character select](docs/screenshots/character-select.jpg) | ![Racing](docs/screenshots/race.jpg) |
-| ![Items and grandstands](docs/screenshots/items.jpg) | ![Results](docs/screenshots/results.jpg) |
+## ⚖️ Disclaimer
 
-## Disclaimer
+Turbo Kart Rally is an original, fan-made homage to the kart-racing genre. It is not affiliated with, endorsed by, or associated with Nintendo. All characters, circuits, names, art, music, and code in this repository are original.
 
-Turbo Kart Rally is an original, fan-made homage to the kart-racing genre. It is not affiliated with, endorsed by, or associated with Nintendo. All characters, circuits, names, art, music and code in this repository are original.
-
-## License
+## 📄 License
 
 [MIT](LICENSE) © 2026 BridgeMind

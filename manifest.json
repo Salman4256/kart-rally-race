@@ -1,0 +1,19 @@
+{
+  "name": "Turbo Kart Rally",
+  "short_name": "TurboKart",
+  "description": "High-octane arcade 3D kart racing game with Grand Prix, Time Trial, and Kart Customization.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0c1017",
+  "theme_color": "#ffd23f",
+  "categories": ["games", "arcade", "sports"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,13 +2,459 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Models Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turbo Kart Rally — 3D Model Studio & Animation Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;900&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏎️</text></svg>" />
   <style>
-    html,body{margin:0;height:100%;background:#1b2330;overflow:hidden;font-family:sans-serif}
-    canvas{display:block}
-    #portraits{position:fixed;left:8px;bottom:8px;display:flex;gap:6px}
-    #portraits img{width:72px;height:72px}
-    #info{position:fixed;left:8px;top:8px;color:#fff;font-size:12px}
+    :root {
+      --primary: #ff4757;
+      --accent: #2ed573;
+      --bg-dark: #0d1117;
+      --glass-bg: rgba(18, 24, 38, 0.78);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-hover: rgba(255, 255, 255, 0.18);
+      --text-main: #f1f2f6;
+      --text-dim: #a4b0be;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-dark);
+      font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-main);
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    /* UI Overlay Layer */
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+
+    #ui-overlay * {
+      pointer-events: auto;
+    }
+
+    /* Top Toolbar */
+    .top-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 10px 18px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-title h1 {
+      font-family: 'Lilita One', cursive;
+      font-size: 22px;
+      letter-spacing: 0.8px;
+      background: linear-gradient(135deg, #ff4757, #ffa502, #2ed573);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0;
+      text-transform: uppercase;
+    }
+
+    .brand-badge {
+      background: rgba(255, 71, 87, 0.2);
+      border: 1px solid rgba(255, 71, 87, 0.4);
+      color: #ff6b81;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Mode Selector Tabs */
+    .mode-tabs {
+      display: flex;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .mode-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .mode-tab:hover {
+      color: var(--text-main);
+      background: var(--glass-hover);
+    }
+
+    .mode-tab.active {
+      background: linear-gradient(135deg, #ff4757, #ff6b81);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .action-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: var(--glass-hover);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+
+    /* Center Area with Side Panels */
+    .center-workspace {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-top: 14px;
+      flex: 1;
+      pointer-events: none;
+    }
+
+    /* Character Card / Inspector HUD */
+    .character-card {
+      width: 280px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .portrait-wrapper {
+      position: relative;
+      width: 68px;
+      height: 68px;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #1e272e;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      flex-shrink: 0;
+    }
+
+    .portrait-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .char-info h2 {
+      font-family: 'Lilita One', cursive;
+      font-size: 20px;
+      letter-spacing: 0.5px;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+
+    .char-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .palette-swatches {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 255, 255, 0.4);
+    }
+
+    /* Stats Grid */
+    .stats-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-bottom: 14px;
+    }
+
+    .stat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .stat-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-bar-fill {
+      height: 100%;
+      width: 60%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #ff4757, #ffa502);
+      transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    /* Mesh Diagnostic Info */
+    .diag-box {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      padding: 8px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      font-size: 11px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .diag-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .diag-label {
+      color: var(--text-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .diag-value {
+      color: #2ed573;
+      font-weight: 800;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    /* Bottom Character Carousel */
+    .bottom-carousel {
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 18px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .carousel-items {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .carousel-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 6px 8px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      width: 72px;
+    }
+
+    .carousel-item img {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .carousel-item span {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 60px;
+    }
+
+    .carousel-item:hover {
+      background: var(--glass-hover);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-2px);
+    }
+
+    .carousel-item.active {
+      background: rgba(255, 71, 87, 0.2);
+      border: 2px solid #ff4757;
+      box-shadow: 0 0 16px rgba(255, 71, 87, 0.4);
+      transform: translateY(-3px);
+    }
+
+    .carousel-item.active span {
+      color: #ff6b81;
+    }
+
+    .hotkey-legend {
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 10px;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+    }
+
+    kbd {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-family: inherit;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    /* lil-gui custom theme styling */
+    .lil-gui {
+      --background-color: rgba(18, 24, 38, 0.9) !important;
+      --text-color: #f1f2f6 !important;
+      --title-background-color: #ff4757 !important;
+      --widget-color: rgba(255, 255, 255, 0.1) !important;
+      --hover-color: rgba(255, 255, 255, 0.18) !important;
+      --focus-color: #ff4757 !important;
+      --number-color: #2ed573 !important;
+      --string-color: #ffa502 !important;
+      font-family: 'Nunito', sans-serif !important;
+      font-weight: 700 !important;
+      border-radius: 14px !important;
+      overflow: hidden !important;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.6) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      backdrop-filter: blur(14px) !important;
+    }
+
+    .lil-gui .title {
+      font-family: 'Lilita One', cursive !important;
+      font-size: 14px !important;
+      letter-spacing: 0.6px !important;
+    }
+
+    /* Stats JS positioning */
+    #stats-container {
+      position: absolute;
+      top: 80px;
+      left: 16px;
+      z-index: 20;
+      pointer-events: auto;
+      border-radius: 8px;
+      overflow: hidden;
+      opacity: 0.85;
+      transition: opacity 0.2s;
+    }
+
+    #stats-container:hover {
+      opacity: 1;
+    }
   </style>
   <script type="importmap">
   {
@@ -20,8 +466,133 @@
   </script>
 </head>
 <body>
-  <div id="info"></div>
-  <div id="portraits"></div>
+  <canvas id="game-canvas"></canvas>
+  <div id="stats-container"></div>
+
+  <div id="ui-overlay">
+    <!-- Top Toolbar -->
+    <header class="top-toolbar">
+      <div class="brand-title">
+        <h1>Turbo Kart Studio</h1>
+        <span class="brand-badge">3D Inspector</span>
+      </div>
+
+      <nav class="mode-tabs">
+        <button class="mode-tab active" data-mode="inspector">
+          <span>🏎️</span> Single Inspector
+        </button>
+        <button class="mode-tab" data-mode="showroom">
+          <span>🏁</span> Showroom Grid
+        </button>
+        <button class="mode-tab" data-mode="items">
+          <span>📦</span> Item Arsenal
+        </button>
+        <button class="mode-tab" data-mode="chase">
+          <span>🎥</span> Chase Cam Test
+        </button>
+      </nav>
+
+      <div class="top-actions">
+        <button class="action-btn" id="btn-reset-cam" title="Reset Camera View (C)">
+          <span>📷</span> Reset Cam
+        </button>
+        <button class="action-btn" id="btn-screenshot" title="Capture Screenshot">
+          <span>📸</span> Snap
+        </button>
+      </div>
+    </header>
+
+    <!-- Center Workspace Area -->
+    <div class="center-workspace">
+      <!-- Character Info Card (Single Inspector Mode) -->
+      <aside class="character-card" id="character-card">
+        <div class="card-header">
+          <div class="portrait-wrapper">
+            <img id="char-portrait" src="" alt="Portrait" />
+          </div>
+          <div class="char-info">
+            <h2 id="char-name">Blaze</h2>
+            <span class="char-badge" id="char-hat">Cap Racer</span>
+            <div class="palette-swatches">
+              <div class="swatch" id="swatch-paint" title="Body Paint"></div>
+              <div class="swatch" id="swatch-accent" title="Accent Decal"></div>
+              <div class="swatch" id="swatch-skin" title="Driver Skin"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-list">
+          <div class="stat-row">
+            <div class="stat-meta">
+              <span>Speed</span>
+              <span id="stat-val-speed">3 / 5</span>
+            </div>
+            <div class="stat-bar-bg">
+              <div class="stat-bar-fill" id="stat-bar-speed" style="width: 60%;"></div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-meta">
+              <span>Acceleration</span>
+              <span id="stat-val-accel">3 / 5</span>
+            </div>
+            <div class="stat-bar-bg">
+              <div class="stat-bar-fill" id="stat-bar-accel" style="width: 60%; background: linear-gradient(90deg, #2ed573, #7bed9f);"></div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-meta">
+              <span>Handling</span>
+              <span id="stat-val-handling">3 / 5</span>
+            </div>
+            <div class="stat-bar-bg">
+              <div class="stat-bar-fill" id="stat-bar-handling" style="width: 60%; background: linear-gradient(90deg, #1e90ff, #70a1ff);"></div>
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-meta">
+              <span>Weight</span>
+              <span id="stat-val-weight">3 / 5</span>
+            </div>
+            <div class="stat-bar-bg">
+              <div class="stat-bar-fill" id="stat-bar-weight" style="width: 60%; background: linear-gradient(90deg, #e056fd, #be2edd);"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="diag-box">
+          <div class="diag-item">
+            <span class="diag-label">Triangles</span>
+            <span class="diag-value" id="diag-triangles">0</span>
+          </div>
+          <div class="diag-item">
+            <span class="diag-label">Draw Calls</span>
+            <span class="diag-value" id="diag-calls">0</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Character Carousel & Controls -->
+    <footer class="bottom-carousel">
+      <div class="carousel-items" id="character-carousel">
+        <!-- Rendered via JS -->
+      </div>
+      <div class="hotkey-legend">
+        <span><kbd>1</kbd>-<kbd>8</kbd> Switch</span>
+        <span><kbd>Space</kbd> Hop</span>
+        <span><kbd>D</kbd> Drift</span>
+        <span><kbd>B</kbd> Boost</span>
+        <span><kbd>S</kbd> Spin</span>
+        <span><kbd>E</kbd> Explode</span>
+        <span><kbd>W</kbd> Wireframe</span>
+      </div>
+    </footer>
+  </div>
+
   <script type="module" src="./models-test.js"></script>
 </body>
 </html>

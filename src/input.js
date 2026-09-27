@@ -59,6 +59,10 @@ export class InputController {
     this.gamepadConnected = false;
     this.lastDevice = 'keyboard';
     this.steer = 0;
+    this.virtualSteer = 0;
+    this.virtualThrottle = 0;
+    this.virtualBrake = 0;
+    this.virtualDrift = false;
     this._lastTime = now();
     this._lastPoll = -1;
     this._state = { throttle: 0, brake: 0, steer: 0, drift: false, item: false, lookBack: false };
@@ -156,8 +160,18 @@ export class InputController {
     for (const a in GP_ACTIONS) this.gpPrev[a] = held[a];
   }
 
+  injectPress(action) {
+    this.latch[action] = true;
+    if (action === 'item') this.itemEdge = true;
+  }
+
   isPressed(action) {
     this._pollGamepad();
+    if (action === 'accelerate' && this.virtualThrottle > 0) return true;
+    if (action === 'brake' && this.virtualBrake > 0) return true;
+    if (action === 'drift' && this.virtualDrift) return true;
+    if (action === 'left' && this.virtualSteer < 0) return true;
+    if (action === 'right' && this.virtualSteer > 0) return true;
     return this._keyHeld(action) || !!this.gpHeld[action];
   }
 
@@ -170,7 +184,7 @@ export class InputController {
   /** Raw throttle value (0..1) without consuming anything. */
   peekThrottle() {
     this._pollGamepad();
-    return Math.max(this._keyHeld('accelerate') ? 1 : 0, this.gpThrottle);
+    return Math.max(this._keyHeld('accelerate') ? 1 : 0, this.gpThrottle, this.virtualThrottle || 0);
   }
 
   getInput() {
@@ -179,7 +193,10 @@ export class InputController {
     const dt = Math.min(0.05, Math.max(0, (t - this._lastTime) / 1000));
     this._lastTime = t;
 
-    const kbTarget = (this._keyHeld('right') ? 1 : 0) - (this._keyHeld('left') ? 1 : 0);
+    const kbTarget = this.virtualSteer !== 0
+      ? this.virtualSteer
+      : ((this._keyHeld('right') ? 1 : 0) - (this._keyHeld('left') ? 1 : 0));
+
     if (this.gpSteer !== 0) {
       this.steer = this.gpSteer;
     } else {
@@ -196,10 +213,10 @@ export class InputController {
     }
 
     const st = this._state;
-    st.throttle = Math.max(this._keyHeld('accelerate') ? 1 : 0, this.gpThrottle);
-    st.brake = Math.max(this._keyHeld('brake') ? 1 : 0, this.gpBrake);
+    st.throttle = Math.max(this._keyHeld('accelerate') ? 1 : 0, this.gpThrottle, this.virtualThrottle || 0);
+    st.brake = Math.max(this._keyHeld('brake') ? 1 : 0, this.gpBrake, this.virtualBrake || 0);
     st.steer = Math.max(-1, Math.min(1, this.steer));
-    st.drift = this._keyHeld('drift') || !!this.gpHeld.drift;
+    st.drift = this._keyHeld('drift') || !!this.gpHeld.drift || !!this.virtualDrift;
     st.item = this.itemEdge;
     this.itemEdge = false;
     st.lookBack = this._keyHeld('lookBack') || !!this.gpHeld.lookBack;
